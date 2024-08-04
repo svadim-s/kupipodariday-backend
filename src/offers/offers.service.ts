@@ -21,10 +21,25 @@ export class OffersService {
   async create(createOfferDto: CreateOfferDto, user: User): Promise<Offer> {
     const { amount, hidden, itemId } = createOfferDto;
 
-    const wish = await this.wishRepository.findOne({ where: { id: itemId } });
+    const wish = await this.wishRepository.findOne({
+      where: { id: itemId },
+      relations: ['owner', 'offers'],
+    });
+
     if (!wish) {
       throw new NotFoundException(`Wish with ID ${itemId} not found`);
     }
+
+    if (user.id === wish.owner.id) {
+      throw new ForbiddenException('You cannot contribute to your own wish');
+    }
+
+    if (amount + wish.raised > wish.price) {
+      throw new ForbiddenException('The amount you are trying to contribute exceeds the wish price');
+    }
+
+    wish.raised += amount;
+    await this.wishRepository.save(wish);
 
     const offer = this.offersRepository.create({
       user,

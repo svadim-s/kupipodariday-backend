@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { User } from "./entities/user.entity";
-import { FindOneOptions, Repository } from "typeorm";
+import { FindOneOptions, Not, Repository } from "typeorm";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { hashValue } from "src/helpers/hash";
 import { UpdateUserDto } from "./dto/update-user.dto";
@@ -15,8 +15,19 @@ export class UsersService {
   ) { }
 
   async signup(createUserDto: CreateUserDto): Promise<User> {
-    const { password } = createUserDto;
-    const user = await this.usersRepository.create({
+    const { email, username, password } = createUserDto;
+    const existingUser = await this.usersRepository.findOne({
+      where: [
+        { email },
+        { username }
+      ],
+    });
+
+    if (existingUser) {
+      throw new BadRequestException('User with this email or username already exists');
+    }
+
+    const user = this.usersRepository.create({
       ...createUserDto,
       password: await hashValue(password)
     });
@@ -56,14 +67,25 @@ export class UsersService {
     return user;
   }
 
-  async update(id: number, updateUserDto: UpdateUserDto) {
-    const { password } = updateUserDto;
+  async update(id: number, updateUserDto: UpdateUserDto): Promise<User> {
+    const { email, username, password } = updateUserDto;
     const user = await this.findById(id);
+
+    const existingUser = await this.usersRepository.findOne({
+      where: [
+        { email, id: Not(id) },
+        { username, id: Not(id) }
+      ],
+    });
+
+    if (existingUser) {
+      throw new BadRequestException('User with this email or username already exists');
+    }
 
     if (password) {
       updateUserDto.password = await hashValue(password);
     }
 
-    return this.usersRepository.save({ ...user, ...updateUserDto })
+    return this.usersRepository.save({ ...user, ...updateUserDto });
   }
 }
